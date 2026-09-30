@@ -56,7 +56,9 @@ jobs:
         run: |
           ANDROID=1 make clean
           ANDROID=1 make env
-          CROSS_ARCH=arm64 ANDROID=1 make nocore -j"$(nproc)"
+          # DEBUG=1 turns on bpf_trace_printk output, which is how a failed
+          # bpf_probe_read_user becomes visible instead of silently emitting zeros.
+          DEBUG=1 CROSS_ARCH=arm64 ANDROID=1 make nocore -j"$(nproc)"
 
           echo "=== artifact ==="
           ls -lh bin/ecapture
