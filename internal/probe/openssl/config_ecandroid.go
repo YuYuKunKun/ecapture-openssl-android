@@ -21,6 +21,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -70,13 +71,19 @@ func (c *Config) detectOS() error {
 	// set Android-specific flags
 	c.IsAndroid = true
 
-	// A library is BoringSSL only if it does not present an OpenSSL version string.
+	// A library is BoringSSL only if neither it nor the libcrypto it loads presents an
+	// OpenSSL version string.
 	//
 	// Asking the library beats guessing from its name. A game that links OpenSSL
 	// statically into a library of its own must be read as OpenSSL, while Android's
 	// own BoringSSL sits at paths like /apex/com.android.conscrypt/lib64/libssl.so,
-	// which contain nothing to recognise it by. The version string settles both.
-	if version, err := detectOpenssl(c.OpensslPath); err == nil && version != "" {
+	// which contain nothing to recognise it by.
+	//
+	// Both halves of a shared OpenSSL have to be asked, because the version string lives
+	// in libcrypto and not in libssl: a distribution's libssl.so.3 answers with nothing,
+	// which is the same answer BoringSSL gives. Android's BoringSSL has no version string
+	// in either half, so asking the pair still separates the two cases.
+	if versionOfLibrary(c.OpensslPath) != "" {
 		c.IsBoringSSL = false
 		return nil
 	}
@@ -143,4 +150,38 @@ func (c *Config) setDefaultIfname() {
 // validateCgroupPath is a no-op on Android since cgroup filtering is not supported.
 func (c *Config) validateCgroupPath() error {
 	return nil
+}
+
+// versionOfLibrary returns the OpenSSL version a library reports, asking its libcrypto when
+// the library itself reports none.
+//
+// The library comes first, which is what covers an application that links OpenSSL
+// statically into a library of its own and has no separate libcrypto to ask. Otherwise the
+// libcrypto it loads is asked: by the name in its DT_NEEDED entries where that can be read,
+// then by the conventional name beside it. A library that reports nothing in any of them is
+// treated as BoringSSL, which is what Android's own copy of it does.
+func versionOfLibrary(soPath string) string {
+	if version, err := detectOpenssl(soPath); err == nil && version != "" {
+		return version
+	}
+
+	directory := filepath.Dir(soPath)
+	var candidates []string
+	if imports, err := getImpNeeded(soPath); err == nil {
+		for _, name := range imports {
+			if strings.Contains(name, "libcrypto.so") {
+				candidates = append(candidates, filepath.Join(directory, name))
+			}
+		}
+	}
+	candidates = append(candidates,
+		filepath.Join(directory, "libcrypto.so.3"),
+		filepath.Join(directory, "libcrypto.so"))
+
+	for _, candidate := range candidates {
+		if version, err := detectOpenssl(candidate); err == nil && version != "" {
+			return version
+		}
+	}
+	return ""
 }
