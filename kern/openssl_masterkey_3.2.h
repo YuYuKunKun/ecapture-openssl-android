@@ -38,7 +38,11 @@ int probe_ssl_master_key(struct pt_regs *ctx) {
     // mastersecret_t sent to userspace
     struct mastersecret_t *mastersecret = make_event();
     // Get a ssl_st pointer
-    void *ssl_st_ptr = (void *)PT_REGS_PARM1(ctx);
+    // The SSL pointer is a heap address, which Android tags in the top byte.
+    // bpf_probe_read_user does not strip the tag, so every read through it returns
+    // -EFAULT while the probe carries on and reports success. The BoringSSL variant
+    // has always untagged here; this one did not.
+    void *ssl_st_ptr = UNTAG((void *)PT_REGS_PARM1(ctx));
     if (!mastersecret) {
         debug_bpf_printk("mastersecret is null\n");
         return 0;
@@ -89,6 +93,8 @@ int probe_ssl_master_key(struct pt_regs *ctx) {
         debug_bpf_printk("(OPENSSL) bpf_probe_read ssl_session_st_ptr failed, ret :%d\n", ret);
         return 0;
     }
+    // The session it points at carries a tag of its own.
+    ssl_session_st_addr = (u64)(uintptr_t)UNTAG((void *)ssl_session_st_addr);
 
     ///////////////////////// get TLS 1.2 master secret ////////////////////
     if (mastersecret->version != TLS1_3_VERSION) {
@@ -131,6 +137,8 @@ int probe_ssl_master_key(struct pt_regs *ctx) {
         }
     } else {
         debug_bpf_printk("cipher_suite_st value: %x\n", address);
+        // As does the cipher.
+        address = (u64)(uintptr_t)UNTAG((void *)address);
         void *cipher_id_ptr = (void *)(address + SSL_CIPHER_ST_ID);
         ret = bpf_probe_read_user(&mastersecret->cipher_id, sizeof(mastersecret->cipher_id), cipher_id_ptr);
         if (ret) {
