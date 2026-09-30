@@ -532,7 +532,7 @@ int probe_tcp_v4_destroy_sock(struct pt_regs* ctx) {
 SEC("uprobe/SSL_set_fd")
 int probe_SSL_set_fd(struct pt_regs* ctx) {
 
-    u64 ssl_addr = (u64)PT_REGS_PARM1(ctx);
+    u64 ssl_addr = (u64)(uintptr_t)UNTAG(PT_REGS_PARM1(ctx));
     u64 fd = (u64)PT_REGS_PARM2(ctx);
     bpf_map_update_elem(&ssl_st_fd, &ssl_addr, &fd, BPF_ANY);
     debug_bpf_printk("SSL_set_fd hook!!, ssl_addr: %d, fd: %d\n", ssl_addr, fd);
