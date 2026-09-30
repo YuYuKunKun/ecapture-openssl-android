@@ -185,8 +185,9 @@ static int process_SSL_data(struct pt_regs* ctx, u64 id,
     // The read result is reported because a failure is otherwise invisible: the event
     // is still emitted, carrying whatever the buffer already held, which is zeros.
     int read_ret = bpf_probe_read_user(event->data, event->data_len, buf);
-    debug_bpf_printk("(OPENSSL) len=%d data_len=%d ptr=%llx read_ret=%d\n",
-                     len, event->data_len, (unsigned long long)buf, read_ret);
+    // Three arguments at most: bpf_trace_printk accepts no more.
+    debug_bpf_printk("(OPENSSL) len=%d ptr=%llx ret=%d\n",
+                     len, (unsigned long long)buf, read_ret);
     bpf_get_current_comm(&event->comm, sizeof(event->comm));
     bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, event,
                           sizeof(struct ssl_data_event_t));
