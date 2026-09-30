@@ -70,7 +70,19 @@ func (c *Config) detectOS() error {
 	// set Android-specific flags
 	c.IsAndroid = true
 
-	// For Android, it's always BoringSSL
+	// Only a library that really is BoringSSL gets the BoringSSL profile.
+	//
+	// Games and other native applications routinely link OpenSSL statically into a
+	// library of their own. Assuming BoringSSL for those attaches the probes to the
+	// right symbols while reading the wrong struct offsets, so the capture runs
+	// without error and produces nothing. Leaving IsBoringSSL false here lets the
+	// shared version detection read the library and pick the matching object file,
+	// which already covers every OpenSSL 1.1.1 patch release.
+	if !strings.Contains(strings.ToLower(c.OpensslPath), "boringssl") {
+		c.IsBoringSSL = false
+		return nil
+	}
+
 	c.IsBoringSSL = true
 
 	// Detect Android version from build.prop

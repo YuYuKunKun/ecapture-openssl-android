@@ -341,7 +341,10 @@ func (c *Config) getSslBpfFile(soPath, sslVersion string) error {
 		// find the sslVersion bpfFile from sslVersionBpfMap
 		var found bool
 		bpfFileKey = verString
-		if isAndroid {
+		// Only a library that is really BoringSSL is rekeyed by Android version. Doing
+		// it for an OpenSSL library throws away the version just read from it, which is
+		// the only thing that selects a matching object file.
+		if isAndroid && c.IsBoringSSL {
 			// sometimes,boringssl version always was "boringssl 1.1.1" on android. but offsets are different.
 			// see kern/boringssl_a_13_kern.c and kern/boringssl_a_14_kern.c
 			// Perhaps we can utilize the Android Version to choose a specific version of boringssl.
@@ -462,7 +465,7 @@ func (c *Config) autoDetectBytecode(ver, soPath string, isAndroid bool) string {
 	var bpfFile string
 	var found bool
 	// if not found, use default
-	if isAndroid {
+	if isAndroid && c.IsBoringSSL {
 		c.SslVersion = AndroidDefaultFilename
 		androidVer := c.AndroidVer
 		if androidVer != "" {

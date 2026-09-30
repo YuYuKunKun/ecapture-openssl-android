@@ -1,0 +1,70 @@
+name: build android arm64 (openssl profile)
+
+# The release Android binary assumes BoringSSL and never consults the shared OpenSSL
+# version detection, so a natively linked OpenSSL library is probed with the wrong
+# struct offsets. This build carries a one line patch that leaves non BoringSSL
+# libraries to the shared detection, which already covers every 1.1.1 patch release.
+#
+# The Android toolchain is kept as upstream has it. Only the detection changed.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: android arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          # The aarch64 cross toolchain is required: upstream's own Android job
+          # targets amd64, which the host compiler already covers, so it never
+          # installs one. variables.mk maps CROSS_ARCH=arm64 to the
+          # aarch64-linux-gnu- prefix and uses it for the kernel headers too.
+          sudo apt-get install --yes build-essential pkgconf libelf-dev \
+            llvm-14 clang-14 flex bison linux-tools-common linux-tools-generic \
+            gcc libssl-dev linux-source \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          for tool in clang llc llvm-strip; do
+            sudo rm -f /usr/bin/$tool
+            sudo ln -s /usr/bin/$tool-14 /usr/bin/$tool
+          done
+          cd /usr/src
+          source_file=$(find . -maxdepth 1 -name "*linux-source*.tar.bz2" | head -1)
+          sudo tar -xf "$source_file"
+          source_dir=$(echo "$source_file" | sed 's/\.tar\.bz2//g')
+          cd "$source_dir"
+          test -f .config || sudo make oldconfig
+        shell: bash
+
+      - name: Build for Android arm64
+        run: |
+          ANDROID=1 make clean
+          ANDROID=1 make env
+          CROSS_ARCH=arm64 ANDROID=1 make nocore -j"$(nproc)"
+
+          echo "=== artifact ==="
+          ls -lh bin/ecapture
+          file bin/ecapture || true
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecapture-android-arm64-openssl
+          path: bin/ecapture
+          if-no-files-found: error
