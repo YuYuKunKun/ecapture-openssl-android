@@ -25,6 +25,14 @@
 #define debug_bpf_printk(fmt, ...)
 #endif
 
+/*
+ * Android marks heap pointers with a tag in the top byte (TBI). bpf_probe_read_user
+ * does not strip it, so every read of such a pointer fails with -EFAULT while the
+ * event is still emitted, carrying the zeros the buffer already held. Masking the top
+ * byte is a no-op for an untagged address, whose top byte is already zero.
+ */
+#define UNTAG(p) ((void *)((unsigned long long)(p) & 0x00FFFFFFFFFFFFFFULL))
+
 #define TASK_COMM_LEN 16
 #define PATH_MAX_LEN 256
 

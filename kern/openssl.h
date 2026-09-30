@@ -274,7 +274,7 @@ static __always_inline int probe_entry_SSL(struct pt_regs* ctx, void *map, int b
         return 0;
     }
 
-    void* ssl = (void*)PT_REGS_PARM1(ctx);
+    void* ssl = UNTAG(PT_REGS_PARM1(ctx));
     u64 *ssl_ver_ptr;
     u64 ssl_version = 0;
     int ret;
@@ -294,7 +294,7 @@ static __always_inline int probe_entry_SSL(struct pt_regs* ctx, void *map, int b
         debug_bpf_printk("openssl uprobe/SSL entry fd: %d, version: %d\n", fd, ssl_version);
     }
 
-    const char* buf = (const char*)PT_REGS_PARM2(ctx);
+    const char* buf = (const char*)UNTAG(PT_REGS_PARM2(ctx));
     struct active_ssl_buf active_ssl_buf_t;
     __builtin_memset(&active_ssl_buf_t, 0, sizeof(active_ssl_buf_t));
     active_ssl_buf_t.fd = fd;
